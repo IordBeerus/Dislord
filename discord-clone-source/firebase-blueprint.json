@@ -1,0 +1,209 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile representation in Discord",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique user ID matching auth UID",
+          "maxLength": 128
+        },
+        "username": {
+          "type": "string",
+          "description": "Unique username",
+          "maxLength": 64
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name of the user",
+          "maxLength": 64
+        },
+        "discriminator": {
+          "type": "string",
+          "description": "Four-digit tag or identifier",
+          "maxLength": 8
+        },
+        "avatar": {
+          "type": "string",
+          "description": "Avatar image URL",
+          "maxLength": 2048
+        },
+        "bannerColor": {
+          "type": "string",
+          "description": "Hex color code for profile banner",
+          "maxLength": 16
+        },
+        "status": {
+          "type": "string",
+          "description": "Current presence status",
+          "enum": ["online", "idle", "dnd", "offline"]
+        },
+        "customStatus": {
+          "type": "string",
+          "description": "Custom status message",
+          "maxLength": 256
+        },
+        "aboutMe": {
+          "type": "string",
+          "description": "Bio description of the user",
+          "maxLength": 1024
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the authenticated user",
+          "maxLength": 256
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp of last status update",
+          "maxLength": 64
+        }
+      },
+      "required": ["id", "username", "displayName", "avatar", "status"]
+    },
+    "Server": {
+      "title": "Server",
+      "description": "Discord guild/community server",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Server unique ID",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "description": "Server name",
+          "maxLength": 100
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of server owner",
+          "maxLength": 128
+        },
+        "icon": {
+          "type": "string",
+          "description": "Icon image URL",
+          "maxLength": 2048
+        },
+        "acronym": {
+          "type": "string",
+          "description": "Server abbreviation",
+          "maxLength": 8
+        },
+        "description": {
+          "type": "string",
+          "description": "Server description",
+          "maxLength": 1024
+        },
+        "category": {
+          "type": "string",
+          "description": "Category genre",
+          "maxLength": 64
+        },
+        "memberCount": {
+          "type": "number",
+          "description": "Number of members in the server"
+        },
+        "onlineCount": {
+          "type": "number",
+          "description": "Number of currently active members"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Server creation timestamp",
+          "maxLength": 64
+        }
+      },
+      "required": ["id", "name", "ownerId"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Chat message sent in a channel or direct message",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique message ID",
+          "maxLength": 128
+        },
+        "channelId": {
+          "type": "string",
+          "description": "Channel ID or DM conversation ID",
+          "maxLength": 128
+        },
+        "authorId": {
+          "type": "string",
+          "description": "User UID who sent the message",
+          "maxLength": 128
+        },
+        "content": {
+          "type": "string",
+          "description": "Text content of the message",
+          "maxLength": 4000
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Creation timestamp",
+          "maxLength": 64
+        },
+        "pinned": {
+          "type": "boolean",
+          "description": "Whether message is pinned"
+        }
+      },
+      "required": ["id", "channelId", "authorId", "content", "timestamp"]
+    },
+    "DirectMessage": {
+      "title": "DirectMessage",
+      "description": "Direct message conversation thread between users",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Conversation ID (typically userA_userB sorted)",
+          "maxLength": 256
+        },
+        "participantIds": {
+          "type": "array",
+          "description": "Array of participant user IDs"
+        },
+        "lastMessage": {
+          "type": "string",
+          "description": "Snippet of latest message",
+          "maxLength": 500
+        },
+        "lastMessageTime": {
+          "type": "string",
+          "description": "Timestamp of latest activity",
+          "maxLength": 64
+        }
+      },
+      "required": ["id", "participantIds"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection of user accounts and profile data"
+    },
+    "/servers/{serverId}": {
+      "schema": "Server",
+      "description": "Collection of community servers"
+    },
+    "/servers/{serverId}/channels/{channelId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Subcollection of channel messages"
+    },
+    "/directMessages/{dmId}": {
+      "schema": "DirectMessage",
+      "description": "Direct message threads between users"
+    },
+    "/directMessages/{dmId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages inside a direct message thread"
+    }
+  }
+}

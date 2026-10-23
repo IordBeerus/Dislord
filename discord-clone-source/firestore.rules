@@ -1,0 +1,143 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all unknown paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // User profile validation
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'username', 'displayName', 'avatar', 'status'])
+        && data.id is string && data.id.size() <= 128
+        && data.username is string && data.username.size() > 0 && data.username.size() <= 64
+        && data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 64
+        && data.avatar is string && data.avatar.size() <= 1048576
+        && data.status in ['online', 'idle', 'dnd', 'offline']
+        && (!('bannerColor' in data) || (data.bannerColor is string && data.bannerColor.size() <= 16))
+        && (!('customStatus' in data) || (data.customStatus is string && data.customStatus.size() <= 256))
+        && (!('aboutMe' in data) || (data.aboutMe is string && data.aboutMe.size() <= 1024))
+        && (!('email' in data) || (data.email is string && data.email.size() <= 256))
+        && (!('leftServerIds' in data) || data.leftServerIds is list)
+        && (!('isNitro' in data) || data.isNitro is bool)
+        && (!('nitroTier' in data) || (data.nitroTier is string && data.nitroTier.size() <= 32))
+        && (!('avatarFrame' in data) || (data.avatarFrame is string && data.avatarFrame.size() <= 64))
+        && (!('customBanner' in data) || (data.customBanner is string && data.customBanner.size() <= 1048576));
+    }
+
+    // Server entity validation
+    function isValidServer(data) {
+      return data.keys().hasAll(['id', 'name', 'ownerId'])
+        && data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.ownerId is string && data.ownerId.size() <= 128
+        && (!('description' in data) || (data.description is string && data.description.size() <= 2048))
+        && (!('icon' in data) || (data.icon is string && data.icon.size() <= 1048576))
+        && (!('acronym' in data) || (data.acronym is string && data.acronym.size() <= 32))
+        && (!('category' in data) || (data.category is string && data.category.size() <= 64))
+        && (!('boostCount' in data) || data.boostCount is number)
+        && (!('boostLevel' in data) || data.boostLevel is number)
+        && (!('boosters' in data) || data.boosters is list)
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    // Message entity validation
+    function isValidMessage(data) {
+      return data.keys().hasAll(['id', 'channelId', 'authorId', 'content', 'timestamp'])
+        && data.id is string && data.id.size() <= 128
+        && data.channelId is string && data.channelId.size() <= 128
+        && data.authorId is string && data.authorId.size() <= 128
+        && data.authorId == request.auth.uid
+        && data.content is string && data.content.size() <= 4000
+        && data.timestamp is string && data.timestamp.size() <= 64;
+    }
+
+    // Direct message thread validation
+    function isValidDirectMessage(data) {
+      return data.keys().hasAll(['id', 'participantIds'])
+        && data.id is string && data.id.size() <= 256
+        && data.participantIds is list
+        && data.participantIds.size() >= 2 && data.participantIds.size() <= 10
+        && request.auth.uid in data.participantIds;
+    }
+
+    // 1. Users collection
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().id == request.auth.uid;
+      allow update: if isOwner(userId) && isValidUser(incoming()) && incoming().id == existing().id;
+      allow delete: if isOwner(userId);
+    }
+
+    // 2. Servers collection
+    match /servers/{serverId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(serverId) && isValidServer(incoming());
+      allow update: if isSignedIn() && isValidId(serverId) && (
+        // Owner update or claim placeholder owner (created locally before sign in)
+        (existing().ownerId == request.auth.uid || existing().ownerId in ['user_me', 'user', 'unknown'] || incoming().ownerId == request.auth.uid) ||
+        // Member updating server details (name, icon, acronym, description, channels, categories, boosts, members)
+        (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'icon', 'acronym', 'description', 'updatedAt', 'members', 'memberCount', 'onlineCount', 'channels', 'categories', 'boostCount', 'boostLevel', 'boosters']))
+      );
+      allow delete: if isSignedIn() && isValidId(serverId) && (existing().ownerId == request.auth.uid || existing().ownerId in ['user_me', 'user', 'unknown']);
+
+      // Messages in channels within servers
+      match /channels/{channelId}/messages/{messageId} {
+        allow get, list: if isSignedIn() && isValidId(channelId);
+        allow create: if isSignedIn() && isValidId(channelId) && isValidId(messageId) && isValidMessage(incoming());
+        allow update: if isSignedIn() && isValidId(channelId) && isValidId(messageId)
+          && existing().authorId == request.auth.uid
+          && incoming().authorId == existing().authorId
+          && incoming().diff(existing()).affectedKeys().hasOnly(['content', 'reactions', 'pinned']);
+        allow delete: if isSignedIn() && (existing().authorId == request.auth.uid || get(/databases/$(database)/documents/servers/$(serverId)).data.ownerId == request.auth.uid);
+      }
+    }
+
+    // 3. Direct messages collection
+    match /directMessages/{dmId} {
+      allow get: if isSignedIn() && (request.auth.uid in resource.data.participantIds);
+      allow list: if isSignedIn() && (request.auth.uid in resource.data.participantIds);
+      allow create: if isSignedIn() && isValidDirectMessage(incoming());
+      allow update: if isSignedIn() && (request.auth.uid in resource.data.participantIds)
+        && incoming().participantIds == existing().participantIds;
+      allow delete: if isSignedIn() && (request.auth.uid in resource.data.participantIds);
+
+      // Direct message messages
+      match /messages/{messageId} {
+        allow get, list: if isSignedIn() && (request.auth.uid in get(/databases/$(database)/documents/directMessages/$(dmId)).data.participantIds);
+        allow create: if isSignedIn() && isValidId(messageId)
+          && (request.auth.uid in get(/databases/$(database)/documents/directMessages/$(dmId)).data.participantIds)
+          && isValidMessage(incoming());
+        allow update: if isSignedIn() && isValidId(messageId)
+          && existing().authorId == request.auth.uid
+          && incoming().authorId == existing().authorId
+          && incoming().diff(existing()).affectedKeys().hasOnly(['content', 'reactions']);
+        allow delete: if isSignedIn() && existing().authorId == request.auth.uid;
+      }
+    }
+  }
+}
