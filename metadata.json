@@ -1,0 +1,6 @@
+{
+  "name": "Discord - Chat, Voice & Communities",
+  "description": "A pixel-perfect 1:1 Discord clone with channels, voice rooms, direct messaging, slash commands, soundboard, server discovery, and sound effects.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
